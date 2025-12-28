@@ -1,0 +1,95 @@
+# Cloudflare Workers Configuration
+# Documentation: https://developers.cloudflare.com/workers/wrangler/configuration/
+
+name = "edge-starter-kit"
+main = "apps/api/deploy/cloudflare.ts"
+
+# Compatibility Date: Set to current date for latest optimizations
+# Update periodically to get new performance improvements
+# Current: 2024-12-28 (latest as of project creation)
+compatibility_date = "2024-12-28"
+
+# Performance Optimization: NO nodejs_compat flag
+# ✅ Pure V8 runtime = fastest cold starts (~10-50ms)
+# ❌ nodejs_compat adds ~50-100ms overhead + increases bundle size
+# This project uses Web Standard APIs only (fetch, crypto, Headers, etc.)
+
+# Account ID (replace with your Cloudflare account ID)
+# Find it at: https://dash.cloudflare.com/ -> Workers & Pages -> Overview
+# account_id = "your-account-id-here"
+
+# Workers Site configuration (for serving static files)
+# [site]
+# bucket = "./dist/client"
+
+# Environment Variables
+[vars]
+NODE_ENV = "production"
+API_VERSION = "1.0.0"
+
+# Development configuration
+[env.development]
+name = "edge-starter-kit-dev"
+vars = { NODE_ENV = "development" }
+
+# Staging configuration
+[env.staging]
+name = "edge-starter-kit-staging"
+vars = { NODE_ENV = "staging" }
+
+# Production configuration
+[env.production]
+name = "edge-starter-kit-prod"
+vars = { NODE_ENV = "production" }
+
+# D1 Database Bindings (uncomment and configure after creating D1 database)
+# [[d1_databases]]
+# binding = "DB"
+# database_name = "edge-starter-kit-db"
+# database_id = "your-d1-database-id"
+
+# KV Namespace Bindings (for caching, sessions, etc.)
+# [[kv_namespaces]]
+# binding = "KV"
+# id = "your-kv-namespace-id"
+
+# R2 Bucket Bindings (for file storage)
+# [[r2_buckets]]
+# binding = "BUCKET"
+# bucket_name = "edge-starter-kit-files"
+
+# Durable Objects (for stateful operations)
+# [[durable_objects.bindings]]
+# name = "COUNTER"
+# class_name = "Counter"
+# script_name = "edge-starter-kit"
+
+# Service Bindings (for calling other Workers)
+# [[services]]
+# binding = "AUTH_SERVICE"
+# service = "auth-worker"
+
+# Analytics Engine Bindings
+# [[analytics_engine_datasets]]
+# binding = "ANALYTICS"
+
+# Build configuration
+[build]
+command = "npm run build:cloudflare"
+
+# Observability
+[observability]
+enabled = true
+
+# Limits & Routing
+# workers_dev = true  # Enable *.workers.dev subdomain for testing
+# route = "example.com/*"  # Custom domain routing
+# routes = [
+#   { pattern = "example.com/api/*", zone_name = "example.com" }
+# ]
+
+# Performance Notes:
+# - Bundle size: Keep under 1MB for optimal cold starts
+# - Use tree-shaking: esbuild automatically removes unused code
+# - Hono router: Already the fastest for Cloudflare Workers (402k ops/sec)
+# - Web Standards: Using fetch, crypto, Headers (no Node.js APIs)

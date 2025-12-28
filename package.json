@@ -11,6 +11,7 @@
   "scripts": {
     "dev": "cross-env NODE_ENV=development tsx server/index.ts",
     "build": "tsx script/build.ts",
+    "build:cloudflare": "esbuild apps/api/deploy/cloudflare.ts --bundle --format=esm --outfile=dist/cloudflare.js --platform=browser --external:node:*",
     "start": "cross-env NODE_ENV=production node dist/index.cjs",
     "check": "tsc",
     "test": "vitest run",
@@ -18,7 +19,21 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "deploy:cloudflare": "wrangler deploy",
+    "deploy:cloudflare:dev": "wrangler deploy --env development",
+    "deploy:cloudflare:staging": "wrangler deploy --env staging",
+    "deploy:cloudflare:prod": "wrangler deploy --env production",
+    "cf:dev": "wrangler dev",
+    "cf:tail": "wrangler tail",
+    "cf:d1:create": "wrangler d1 create edge-starter-kit-db",
+    "cf:d1:list": "wrangler d1 list",
+    "cf:kv:create": "wrangler kv:namespace create CACHE",
+    "cf:login": "wrangler login",
+    "deno:dev": "deno task dev",
+    "deno:start": "deno task start",
+    "deno:check": "deno task check",
+    "deno:deploy": "deno task deploy"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.7",
@@ -114,7 +129,8 @@
     "tsx": "^4.20.5",
     "typescript": "5.6.3",
     "vite": "^7.3.0",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.54.0"
   },
   "overrides": {
     "drizzle-kit": {

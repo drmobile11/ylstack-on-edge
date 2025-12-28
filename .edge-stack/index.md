@@ -17,6 +17,7 @@ These files ensure AI assistants understand the edge-first architecture and foll
 
 ## 📚 Documentation Index
 
+### Core Documentation
 - **[Architecture](./architecture.md)**: System design, project structure, and patterns.
 - **[Tech Stack](./tech-stack.md)**: Libraries, tools, and dependencies.
 - **[Coding Standards](./coding-standards.md)**: Style guides, conventions, and best practices.
@@ -24,6 +25,12 @@ These files ensure AI assistants understand the edge-first architecture and foll
 - **[Deployment](./deployment.md)**: Guide to adapters (Cloudflare, Vercel, Node.js) and switching runtimes.
 - **[Requirements](./requirements.md)**: Core technical requirements and constraints.
 - **[Checklist](./checklist.md)**: Pre-commit and pre-deployment checklists.
+
+### Performance & Optimization
+- **[Cloudflare Performance Guide](./cloudflare-performance.md)**: Comprehensive performance optimization guide
+- **[Performance Checklist](./PERFORMANCE-CHECKLIST.md)**: Quick reference for maintaining optimal performance
+- **[Deno Deploy Guide](./deno-deploy.md)**: Complete guide for deploying to Deno Deploy
+- **[Deno Deploy Checklist](./deno-deploy-checklist.md)**: Pre-deployment checklist for Deno Deploy
 
 ## 🚀 Quick Start
 

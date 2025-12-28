@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.window", "deno.unstable"],
+    "strict": true,
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
+  "imports": {
+    "hono": "npm:hono@^4.0.0",
+    "hono/": "npm:hono/"
+  },
+  "tasks": {
+    "dev": "deno run --allow-net --allow-env --allow-read --watch apps/api/deploy/deno.ts",
+    "start": "deno run --allow-net --allow-env --allow-read apps/api/deploy/deno.ts",
+    "deploy": "deployctl deploy --project=edge-starter-kit apps/api/deploy/deno.ts",
+    "check": "deno check apps/api/deploy/deno.ts"
+  },
+  "fmt": {
+    "useTabs": false,
+    "lineWidth": 100,
+    "indentWidth": 2,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"]
+    }
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".git",
+    "coverage"
+  ]
+}

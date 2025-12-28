@@ -3,8 +3,9 @@
 // Can run on: Cloudflare Workers, Vercel Edge, Deno Deploy, Node.js
 
 import { Hono } from 'hono';
+import type { AppEnv } from './types.ts';
 
-const app = new Hono().basePath('/api');
+const app = new Hono<{ Bindings: AppEnv }>().basePath('/api');
 
 // === Middleware ===
 
@@ -38,7 +39,7 @@ app.get('/hello', (c) => {
   const name = c.req.query('name') || 'World';
   return c.json({
     message: `Hello, ${name}!`,
-    runtime: process.env.NODE_ENV || 'edge',
+    runtime: c.env?.NODE_ENV || 'edge', // ✅ Use Hono context env, not process.env
   });
 });
 
