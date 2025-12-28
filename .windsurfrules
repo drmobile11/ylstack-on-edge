@@ -1,0 +1,381 @@
+# Edge Starter Kit - Windsurf AI Rules
+
+## 🌊 Welcome to Edge Starter Kit
+You're working with a **multi-runtime edge-ready starter template** that runs on Cloudflare Workers, Vercel Edge, Deno Deploy, and Node.js.
+
+## 📖 Documentation-First Approach
+**ALWAYS consult `.edge-stack/` before making changes:**
+
+```bash
+.edge-stack/
+├── index.md              # Start here - project overview
+├── requirements.md       # Edge constraints & rules
+├── architecture.md       # Project structure
+├── coding-standards.md   # Patterns & best practices
+├── workflows.md          # Step-by-step guides
+├── deployment.md         # Multi-runtime deployment
+└── checklist.md          # Quality assurance
+```
+
+## 🎯 Core Principles
+
+### 1. Edge Compatibility is Sacred
+```typescript
+// ❌ NEVER in apps/api/src/
+import fs from 'fs';
+import path from 'path';
+import { randomBytes } from 'crypto';
+
+// ✅ ALWAYS use Web Standards
+crypto.randomUUID();
+fetch('https://api.example.com');
+new Request('https://example.com');
+new Response('Hello');
+```
+
+### 2. Separation of Concerns
+```
+apps/api/src/       → Pure Hono app (edge-compatible)
+apps/api/deploy/    → Platform adapters (Node.js OK)
+server/             → Dev server (Node.js OK)
+shared/             → Type contracts (platform-agnostic)
+client/             → React frontend
+```
+
+### 3. Type Safety Everywhere
+```typescript
+// Define contract in shared/routes.ts
+export const userRoutes = {
+  get: {
+    method: 'GET' as const,
+    path: '/api/users/:id',
+    responses: {
+      200: z.object({ id: z.string(), name: z.string() })
+    }
+  }
+};
+
+// Implement in apps/api/src/index.ts
+app.get('/users/:id', async (c) => {
+  const id = c.req.param('id');
+  // Type-safe implementation
+});
+```
+
+## 🚀 Common Workflows
+
+### Adding a New API Endpoint
+
+**Step 1: Read the guide**
+```bash
+# Check .edge-stack/workflows.md → "Creating a New Feature"
+```
+
+**Step 2: Define contract**
+```typescript
+// shared/routes.ts
+export const api = {
+  items: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/items',
+      responses: {
+        200: z.array(itemSchema)
+      }
+    }
+  }
+};
+```
+
+**Step 3: Implement logic**
+```typescript
+// apps/api/src/index.ts
+import { z } from 'zod';
+
+const itemSchema = z.object({
+  id: z.string(),
+  name: z.string()
+});
+
+app.get('/items', async (c) => {
+  const items = await db.select().from(itemsTable);
+  return c.json(items);
+});
+```
+
+**Step 4: Verify**
+```bash
+npm run check  # TypeScript
+npm run dev    # Start server
+curl http://localhost:5000/api/items
+```
+
+### Adding a Database Table
+
+**Step 1: Update schema**
+```typescript
+// shared/schema.ts
+export const itemsTable = sqliteTable('items', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+});
+```
+
+**Step 2: Generate & apply migration**
+```bash
+npm run db:generate  # Creates migration file
+npm run db:migrate   # Applies migration
+npm run db:studio    # Open GUI to verify
+```
+
+### Deploying to New Platform
+
+**Step 1: Check deployment guide**
+```bash
+# Read .edge-stack/deployment.md
+```
+
+**Step 2: Verify adapter exists**
+```bash
+ls apps/api/deploy/
+# cloudflare.ts, vercel.ts, deno.ts, node.ts
+```
+
+**Step 3: Configure platform**
+```toml
+# Example: wrangler.toml for Cloudflare
+name = "my-app"
+main = "apps/api/deploy/cloudflare.ts"
+compatibility_date = "2024-01-01"
+```
+
+## ✅ Quality Gates
+
+### Before Committing
+```bash
+# 1. Type check
+npm run check
+
+# 2. Run tests
+npm test
+
+# 3. Start dev server
+npm run dev
+
+# 4. Manual test
+curl http://localhost:5000/api/health
+```
+
+### Code Review Checklist
+- [ ] No Node.js APIs in `apps/api/src/`
+- [ ] All inputs validated with Zod
+- [ ] Database queries use Drizzle ORM
+- [ ] Error responses are structured
+- [ ] TypeScript check passes
+- [ ] Tests added/updated
+- [ ] Documentation updated if needed
+
+## 🎨 Code Style Guide
+
+### Input Validation (Required)
+```typescript
+import { z } from 'zod';
+
+// Define schema
+const createUserSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1)
+});
+
+// Validate in route
+app.post('/users', async (c) => {
+  const body = await c.req.json();
+  const validated = createUserSchema.parse(body);
+  // Use validated data
+});
+```
+
+### Database Operations
+```typescript
+import { db } from '@/server/db';
+import { users } from '@/shared/schema';
+import { eq } from 'drizzle-orm';
+
+// ✅ Good: Parameterized queries
+const user = await db.select()
+  .from(users)
+  .where(eq(users.email, email))
+  .limit(1);
+
+// ❌ Bad: String interpolation
+const user = await db.execute(`SELECT * FROM users WHERE email = '${email}'`);
+```
+
+### Error Handling
+```typescript
+// ✅ Good: Structured responses
+if (!user) {
+  return c.json({ message: 'User not found' }, 404);
+}
+
+// ❌ Bad: Throwing errors
+if (!user) {
+  throw new Error('User not found');
+}
+```
+
+## 🔍 Debugging Guide
+
+### Server Won't Start
+```bash
+# Check TypeScript errors
+npm run check
+
+# Check for port conflicts
+netstat -ano | findstr :5000  # Windows
+lsof -i :5000                 # Mac/Linux
+
+# Check environment variables
+cat .env
+```
+
+### Database Issues
+```bash
+# Verify database exists
+ls -la sqlite.db
+
+# Check schema
+npm run db:studio
+
+# Reset database
+rm sqlite.db
+npm run db:migrate
+```
+
+### Edge Compatibility Issues
+```bash
+# Search for Node.js APIs in edge code
+grep -r "require('fs')" apps/api/src/
+grep -r "import.*from 'path'" apps/api/src/
+
+# Check .edge-stack/requirements.md for alternatives
+```
+
+## 🚨 Red Flags
+
+Stop immediately if you see:
+- 🚩 `import fs from 'fs'` in `apps/api/src/`
+- 🚩 `any` type without explicit reason
+- 🚩 Raw SQL strings with user input
+- 🚩 Missing Zod validation on endpoints
+- 🚩 Hardcoded secrets in code
+- 🚩 Breaking API contracts without discussion
+
+## 💡 Pro Tips
+
+### Use Drizzle Studio
+```bash
+npm run db:studio
+# Opens GUI at http://localhost:4983
+# Great for inspecting data during development
+```
+
+### Test Edge Compatibility
+```typescript
+// If unsure if code is edge-compatible, test with:
+const isEdgeCompatible = typeof process === 'undefined';
+// If this breaks your code, you're using Node.js APIs
+```
+
+### Hot Reload
+```bash
+# Dev server has hot reload enabled
+npm run dev
+# Edit files and see changes instantly
+```
+
+## 📚 Learning Resources
+
+### Internal Docs
+- **Quick Start**: `.edge-stack/index.md`
+- **Architecture**: `.edge-stack/architecture.md`
+- **Best Practices**: `.edge-stack/coding-standards.md`
+- **Workflows**: `.edge-stack/workflows.md`
+
+### External Docs
+- [Hono](https://hono.dev) - Web framework
+- [Drizzle ORM](https://orm.drizzle.team) - Database toolkit
+- [Zod](https://zod.dev) - Schema validation
+- [Cloudflare Workers](https://workers.cloudflare.com) - Edge runtime
+
+## 🤝 Collaboration Tips
+
+### When Suggesting Changes
+1. Explain why (reference `.edge-stack/` docs)
+2. Show code example
+3. Mention trade-offs
+4. Propose testing approach
+
+### When User is Stuck
+1. Ask clarifying questions
+2. Check relevant `.edge-stack/` documentation
+3. Search codebase for similar patterns
+4. Provide step-by-step solution
+
+### When Unsure
+1. Read `.edge-stack/` documentation first
+2. Check existing code for patterns
+3. Ask user for preferences
+4. Propose solution with alternatives
+
+## 🎯 Success Criteria
+
+Every contribution should:
+1. ✅ Maintain edge compatibility
+2. ✅ Pass TypeScript checks
+3. ✅ Include proper validation
+4. ✅ Follow project patterns
+5. ✅ Be tested (manual or automated)
+6. ✅ Update docs if significant
+
+## 🔗 Quick Commands
+
+```bash
+# Development
+npm run dev              # Start dev server
+npm run check            # TypeScript check
+npm test                 # Run tests
+npm run test:watch       # Tests in watch mode
+
+# Database
+npm run db:generate      # Generate migrations
+npm run db:migrate       # Apply migrations
+npm run db:push          # Push schema directly
+npm run db:studio        # Open database GUI
+
+# Production
+npm run build            # Build for production
+npm start                # Run production build
+```
+
+## 🌟 Philosophy
+
+> **Write Once, Run Anywhere**
+> 
+> Code in `apps/api/src/` should run identically on all platforms:
+> - Cloudflare Workers (V8 Isolates)
+> - Vercel Edge (V8 Isolates)
+> - Deno Deploy (Deno runtime)
+> - Node.js (Traditional server)
+> 
+> This is achieved by using only Web Standard APIs and keeping
+> platform-specific code isolated in adapters.
+
+---
+
+**Remember**: `.edge-stack/` is your source of truth. When in doubt, read the docs!
+
+**Version**: 1.0.0  
+**Last Updated**: December 28, 2025  
+**Maintained By**: Edge Starter Kit Community

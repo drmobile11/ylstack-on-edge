@@ -1,0 +1,273 @@
+# Edge Starter Kit - Cline AI Rules
+
+## 🎯 Mission
+You are assisting with the **Edge Starter Kit** - a multi-runtime, edge-ready starter template. Your primary goal is to help developers build edge-compatible applications while maintaining code quality and following established patterns.
+
+## 📚 MANDATORY: Read Documentation First
+**Before ANY code modification, you MUST:**
+1. Read `.edge-stack/index.md` for project overview
+2. Check `.edge-stack/requirements.md` for edge constraints
+3. Review `.edge-stack/coding-standards.md` for patterns
+4. Consult `.edge-stack/workflows.md` for step-by-step guides
+
+## 🚫 Absolute Rules (NEVER Break These)
+
+### Edge Compatibility
+```typescript
+// ❌ FORBIDDEN in apps/api/src/
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto'; // crypto.randomBytes
+import { exec } from 'child_process';
+
+// ✅ ALLOWED in apps/api/src/
+import { Hono } from 'hono';
+const id = crypto.randomUUID(); // Web Crypto API
+fetch('https://api.example.com');
+new URL('https://example.com');
+```
+
+### Code Organization
+- **`apps/api/src/`**: Pure Hono app (NO Node.js APIs)
+- **`apps/api/deploy/`**: Platform adapters (Node.js OK here)
+- **`server/`**: Dev server (Node.js OK here)
+- **`shared/`**: Type contracts (platform-agnostic)
+
+## 🔄 Standard Workflows
+
+### Adding API Route
+```bash
+# 1. Read workflow guide
+cat .edge-stack/workflows.md
+
+# 2. Define contract in shared/routes.ts
+# 3. Implement in apps/api/src/index.ts
+# 4. Test with: npm run dev
+# 5. Verify types: npm run check
+```
+
+### Adding Database Table
+```bash
+# 1. Update shared/schema.ts
+# 2. Generate migration: npm run db:generate
+# 3. Apply migration: npm run db:migrate
+# 4. Verify in Drizzle Studio: npm run db:studio
+```
+
+### Creating Runtime Adapter
+```bash
+# 1. Read .edge-stack/deployment.md
+# 2. Create apps/api/deploy/[platform].ts
+# 3. Export fetch handler
+# 4. Update apps/api/package.json exports
+# 5. Document in .edge-stack/deployment.md
+```
+
+## ✅ Quality Checklist (Run After Every Change)
+
+```bash
+# Type safety
+npm run check
+
+# Development server
+npm run dev
+
+# Tests
+npm test
+
+# Manual endpoint test
+curl http://localhost:5000/api/[endpoint]
+```
+
+## 🎨 Code Patterns
+
+### Input Validation (ALWAYS Required)
+```typescript
+import { z } from 'zod';
+
+const inputSchema = z.object({
+  name: z.string().min(1),
+  email: z.string().email()
+});
+
+app.post('/users', async (c) => {
+  const body = await c.req.json();
+  const validated = inputSchema.parse(body); // Throws if invalid
+  // ... use validated data
+});
+```
+
+### Database Queries (Use Drizzle)
+```typescript
+import { db } from '@/server/db'; // Only in dev/adapters
+import { users } from '@/shared/schema';
+import { eq } from 'drizzle-orm';
+
+// ✅ Good: Parameterized
+const user = await db.select()
+  .from(users)
+  .where(eq(users.id, userId));
+
+// ❌ Bad: SQL injection risk
+const user = await db.execute(`SELECT * FROM users WHERE id = '${userId}'`);
+```
+
+### Error Responses (Consistent Format)
+```typescript
+// ✅ Good: Structured errors
+return c.json({ message: 'User not found' }, 404);
+return c.json({ message: 'Invalid input', field: 'email' }, 400);
+
+// ❌ Bad: Throwing errors
+throw new Error('User not found');
+```
+
+## 🔍 Decision Tree
+
+### User Wants to Add Feature
+1. Does it require new API route?
+   - Yes → Read `.edge-stack/workflows.md` → "Creating a New Feature"
+   - No → Continue
+
+2. Does it require database changes?
+   - Yes → Read `.edge-stack/workflows.md` → "Adding Database Tables"
+   - No → Continue
+
+3. Is it edge-compatible?
+   - Check `.edge-stack/requirements.md`
+   - No Node.js APIs in `apps/api/src/`
+   - Propose alternative if needed
+
+4. Implement following project patterns
+5. Run quality checklist
+6. Ask user to test
+
+### User Reports Bug
+1. Ask for reproduction steps
+2. Identify layer (client/server/shared/adapter)
+3. Check `.edge-stack/coding-standards.md` for correct pattern
+4. Propose fix with explanation
+5. Suggest adding test to prevent regression
+
+### User Wants to Deploy
+1. Ask target platform (Cloudflare/Vercel/Deno/Node.js)
+2. Direct to `.edge-stack/deployment.md`
+3. Check if adapter exists in `apps/api/deploy/`
+4. Guide through platform-specific setup
+5. Remind about database migration (SQLite → Edge DB)
+
+## 🚨 Warning Signs
+
+If you see any of these, STOP and reconsider:
+- Importing Node.js built-ins in `apps/api/src/`
+- Using `any` type without explicit justification
+- Raw SQL strings instead of Drizzle ORM
+- Missing Zod validation on user inputs
+- Hardcoded credentials or secrets
+- Breaking existing API contracts without discussion
+
+## 💬 Communication Style
+
+### Be Proactive
+```
+❌ "I can add that route."
+✅ "I'll add that route. First, I need to:
+   1. Define the contract in shared/routes.ts
+   2. Implement in apps/api/src/index.ts
+   3. Add Zod validation
+   Should I proceed?"
+```
+
+### Explain Trade-offs
+```
+❌ "Done."
+✅ "I've added the feature using Web Crypto API instead of Node's crypto
+   module to maintain edge compatibility. This works across all runtimes
+   (Cloudflare, Vercel, Deno, Node.js)."
+```
+
+### Reference Documentation
+```
+❌ "You should use Hono."
+✅ "According to .edge-stack/tech-stack.md, we use Hono for the API
+   framework because it's edge-compatible and has zero dependencies."
+```
+
+## 🧪 Testing Approach
+
+### Always Suggest Tests
+```typescript
+// When adding feature, suggest:
+// "Should I also add a test for this endpoint?"
+
+// apps/api/src/__tests__/feature.test.ts
+import { describe, it, expect } from 'vitest';
+import app from '../index';
+
+describe('New Feature', () => {
+  it('should return expected response', async () => {
+    const req = new Request('http://localhost/api/endpoint');
+    const res = await app.fetch(req);
+    const data = await res.json();
+    
+    expect(res.status).toBe(200);
+    expect(data).toMatchObject({ expected: 'shape' });
+  });
+});
+```
+
+## 📖 Documentation Updates
+
+### When to Update
+- New architectural pattern → `.edge-stack/architecture.md`
+- New coding pattern → `.edge-stack/coding-standards.md`
+- New workflow → `.edge-stack/workflows.md`
+- New deployment target → `.edge-stack/deployment.md`
+- User-facing change → `README.md`
+
+### How to Update
+1. Propose documentation change to user
+2. Explain why it's needed
+3. Show diff of what will change
+4. Update after user approval
+
+## 🎯 Success Metrics
+
+Every change should result in:
+1. ✅ TypeScript check passes
+2. ✅ Dev server runs without errors
+3. ✅ Edge-compatible (no Node.js APIs in wrong places)
+4. ✅ Type-safe (Zod + TypeScript)
+5. ✅ Tested (manual or automated)
+6. ✅ Documented (if significant)
+
+## 🔗 Quick Reference
+
+| Task | Documentation | Command |
+|------|--------------|---------|
+| Add API route | `.edge-stack/workflows.md` | `npm run dev` |
+| Add DB table | `.edge-stack/workflows.md` | `npm run db:generate` |
+| Deploy | `.edge-stack/deployment.md` | Platform-specific |
+| Type check | - | `npm run check` |
+| Run tests | - | `npm test` |
+| DB GUI | - | `npm run db:studio` |
+
+## 💡 Philosophy
+
+> **Edge-First, Universal Compatibility**
+> 
+> Every line of code in `apps/api/src/` should run identically on:
+> - Cloudflare Workers
+> - Vercel Edge Functions
+> - Deno Deploy
+> - Node.js
+> 
+> This is achieved by using only Web Standard APIs and keeping
+> platform-specific code in adapters.
+
+---
+
+**Remember**: When in doubt, read `.edge-stack/` documentation first!
+
+**Version**: 1.0.0  
+**Last Updated**: December 28, 2025

@@ -1,0 +1,73 @@
+# AI Digest Ignore
+# Files and directories that AI assistants should ignore when analyzing the project
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.next/
+.vercel/
+.turbo/
+
+# Database files
+*.db
+*.db-journal
+sqlite.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Coverage
+coverage/
+.nyc_output/
+
+# Generated files
+*.generated.*
+*.gen.*
+
+# Lock files (too large)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Assets (images, fonts, etc.)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.woff
+*.woff2
+*.ttf
+*.eot
+
+# Documentation that's too verbose for context
+# (Keep .edge-stack/ visible - it's essential!)

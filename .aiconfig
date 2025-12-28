@@ -1,0 +1,108 @@
+{
+  "name": "Edge Starter Kit",
+  "version": "1.0.0",
+  "description": "Multi-runtime edge-ready full-stack starter template",
+  "documentation": {
+    "primary": ".edge-stack/index.md",
+    "rules": {
+      "cursor": ".cursorrules",
+      "cline": ".clinerules",
+      "windsurf": ".windsurfrules"
+    },
+    "required_reading": [
+      ".edge-stack/index.md",
+      ".edge-stack/requirements.md",
+      ".edge-stack/architecture.md",
+      ".edge-stack/coding-standards.md"
+    ]
+  },
+  "constraints": {
+    "edge_compatibility": {
+      "forbidden_in_src": [
+        "fs",
+        "path",
+        "os",
+        "child_process",
+        "crypto.randomBytes",
+        "better-sqlite3",
+        "pg",
+        "mysql2",
+        "bcrypt"
+      ],
+      "allowed_apis": [
+        "fetch",
+        "Request",
+        "Response",
+        "URL",
+        "URLSearchParams",
+        "crypto.randomUUID",
+        "crypto.subtle",
+        "Headers",
+        "FormData",
+        "Blob",
+        "ReadableStream",
+        "WritableStream"
+      ]
+    },
+    "code_organization": {
+      "apps/api/src": "Platform-agnostic business logic (pure Hono app)",
+      "apps/api/deploy": "Platform-specific adapters (entry points only)",
+      "server": "Development server (Node.js + Express + Vite)",
+      "shared": "Type-safe contracts (Zod schemas, Drizzle tables)",
+      "client": "Frontend React application"
+    }
+  },
+  "workflows": {
+    "add_api_route": [
+      "Read .edge-stack/workflows.md",
+      "Define contract in shared/routes.ts",
+      "Implement in apps/api/src/index.ts",
+      "Add Zod validation",
+      "Test with npm run dev",
+      "Verify with npm run check"
+    ],
+    "add_database_table": [
+      "Update shared/schema.ts",
+      "Run npm run db:generate",
+      "Run npm run db:migrate",
+      "Verify with npm run db:studio"
+    ],
+    "deploy_to_platform": [
+      "Read .edge-stack/deployment.md",
+      "Check adapter exists in apps/api/deploy/",
+      "Configure platform-specific settings",
+      "Deploy using platform CLI"
+    ]
+  },
+  "quality_gates": {
+    "pre_commit": [
+      "npm run check",
+      "npm test",
+      "npm run dev"
+    ],
+    "code_review": [
+      "No Node.js APIs in apps/api/src/",
+      "All inputs validated with Zod",
+      "Database queries use Drizzle ORM",
+      "Error responses are structured",
+      "TypeScript check passes",
+      "Tests added/updated"
+    ]
+  },
+  "tech_stack": {
+    "framework": "Hono",
+    "validation": "Zod",
+    "database": "Drizzle ORM + SQLite (dev) / D1/Turso/Neon (prod)",
+    "frontend": "React + Vite",
+    "runtime": "Multi-runtime (Cloudflare, Vercel, Deno, Node.js)"
+  },
+  "commands": {
+    "dev": "npm run dev",
+    "build": "npm run build",
+    "test": "npm test",
+    "check": "npm run check",
+    "db:generate": "npm run db:generate",
+    "db:migrate": "npm run db:migrate",
+    "db:studio": "npm run db:studio"
+  }
+}

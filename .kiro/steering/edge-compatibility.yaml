@@ -1,0 +1,155 @@
+# Kiro AI Steering - Edge Compatibility Rules
+# This file defines behavioral steering for edge-first development
+
+name: edge-compatibility
+version: 1.0.0
+priority: critical
+
+# Core behavioral directives
+directives:
+  - id: enforce-edge-apis
+    description: "Prevent Node.js APIs in edge code"
+    severity: error
+    scope:
+      - "apps/api/src/**/*.ts"
+      - "apps/api/src/**/*.js"
+    
+    forbidden_patterns:
+      - pattern: "import.*from ['\"]fs['\"]"
+        message: "File system APIs are not available in edge runtimes"
+        suggestion: "Use edge-compatible storage (R2, Vercel Blob) or environment variables"
+        
+      - pattern: "import.*from ['\"]path['\"]"
+        message: "Path module is Node.js-specific"
+        suggestion: "Use URL API for path manipulation"
+        
+      - pattern: "import.*from ['\"]os['\"]"
+        message: "OS module is not available in edge runtimes"
+        suggestion: "Use environment variables via c.env for configuration"
+        
+      - pattern: "import.*\\{.*randomBytes.*\\}.*from ['\"]crypto['\"]"
+        message: "crypto.randomBytes is Node.js-specific"
+        suggestion: "Use crypto.randomUUID() or crypto.getRandomValues() from Web Crypto API"
+        
+      - pattern: "process\\.env\\."
+        message: "process.env is not available in edge runtimes"
+        suggestion: "Use c.env.VARIABLE_NAME in Hono context"
+        
+      - pattern: "__dirname|__filename"
+        message: "Directory and filename globals are Node.js-specific"
+        suggestion: "Use import.meta.url or avoid file system operations"
+        
+      - pattern: "import.*from ['\"]better-sqlite3['\"]"
+        message: "SQLite native module only works in Node.js"
+        suggestion: "Use Cloudflare D1, Turso, or Neon HTTP for edge databases"
+        
+      - pattern: "import.*from ['\"]bcrypt['\"]"
+        message: "bcrypt is a native module incompatible with edge"
+        suggestion: "Use @node-rs/bcrypt or Web Crypto API for hashing"
+    
+    required_patterns:
+      - pattern: "c\\.get\\(['\"]db['\"]\\)"
+        message: "Database should be accessed via dependency injection"
+        context: "Database queries"
+        
+      - pattern: "c\\.env\\."
+        message: "Environment variables should use Hono context"
+        context: "Environment access"
+
+  - id: enforce-web-standards
+    description: "Promote Web Standard APIs"
+    severity: warning
+    scope:
+      - "apps/api/src/**/*.ts"
+    
+    recommended_patterns:
+      - pattern: "crypto\\.randomUUID\\(\\)"
+        description: "Use Web Crypto for random UUIDs"
+        
+      - pattern: "crypto\\.subtle\\."
+        description: "Use Web Crypto Subtle API for cryptographic operations"
+        
+      - pattern: "fetch\\("
+        description: "Use fetch API for HTTP requests"
+        
+      - pattern: "new Request\\(|new Response\\("
+        description: "Use Web Standard Request/Response objects"
+
+  - id: database-injection
+    description: "Enforce database dependency injection"
+    severity: error
+    scope:
+      - "apps/api/src/**/*.ts"
+    
+    forbidden_patterns:
+      - pattern: "import.*\\{.*db.*\\}.*from ['\"].*server/db['\"]"
+        message: "Never import database directly from server/"
+        suggestion: "Use c.get('db') to access injected database instance"
+        
+      - pattern: "import.*\\{.*db.*\\}.*from ['\"]@/server"
+        message: "Server code should not be imported in edge code"
+        suggestion: "Use dependency injection via Hono context"
+
+# Learning resources
+documentation:
+  primary: ".edge-stack/requirements.md"
+  references:
+    - ".edge-stack/architecture.md"
+    - ".edge-stack/coding-standards.md"
+    - ".edge-stack/workflows.md"
+
+# Response templates
+response_templates:
+  edge_incompatibility:
+    format: |
+      ❌ **Edge Incompatibility Detected**
+      
+      **Issue**: {issue_description}
+      **Location**: {file_path}:{line_number}
+      
+      **Why this matters**: Edge runtimes (Cloudflare Workers, Vercel Edge) don't support Node.js-specific APIs. This code will work in development but fail in production.
+      
+      **Solution**:
+      ```typescript
+      // ❌ Current (Node.js-specific)
+      {current_code}
+      
+      // ✅ Fixed (Edge-compatible)
+      {suggested_code}
+      ```
+      
+      📖 **Learn more**: See `.edge-stack/requirements.md` for edge constraints
+  
+  database_injection:
+    format: |
+      ❌ **Database Access Pattern Issue**
+      
+      **Issue**: Direct database import detected in edge code
+      **Location**: {file_path}
+      
+      **Why this matters**: Database connections must be injected via adapters to support multiple runtimes.
+      
+      **Solution**:
+      ```typescript
+      // ❌ Wrong
+      import { db } from '../../../server/db';
+      
+      // ✅ Correct
+      const db = c.get('db'); // Injected via context
+      ```
+      
+      📖 **Learn more**: See `.edge-stack/architecture.md` section on "Dependency Injection"
+
+# Success criteria
+validation:
+  - name: "No Node.js imports in edge code"
+    check: "No forbidden patterns in apps/api/src/"
+    
+  - name: "Database accessed via context"
+    check: "All database queries use c.get('db')"
+    
+  - name: "Environment variables via context"
+    check: "All env access uses c.env.*"
+    
+  - name: "TypeScript strict mode"
+    check: "No 'any' types in codebase"

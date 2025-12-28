@@ -2,6 +2,19 @@
 
 This directory contains the rules, requirements, and guidelines for the Edge-Ready Monorepo.
 
+## 🤖 AI Assistant Integration
+
+**IMPORTANT**: This project includes AI assistant configuration files in the root directory:
+- **`.cursorrules`**: Configuration for Cursor AI
+- **`.clinerules`**: Configuration for Cline AI
+- **`.windsurfrules`**: Configuration for Windsurf/Claude
+- **`.naorules`**: Configuration for Nao AI (comprehensive workflows)
+- **`.kirorules`**: Configuration for Kiro AI (behavioral steering)
+- **`.aiconfig`**: Universal AI configuration (JSON)
+- **`.aidigestignore`**: Files AI should ignore
+
+These files ensure AI assistants understand the edge-first architecture and follow project conventions. **All AI assistants MUST read this `.edge-stack/` directory before making code changes.**
+
 ## 📚 Documentation Index
 
 - **[Architecture](./architecture.md)**: System design, project structure, and patterns.

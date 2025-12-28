@@ -1,0 +1,359 @@
+# Kiro AI Steering - Standard Workflows
+# Defines step-by-step workflows for common development tasks
+
+name: workflows
+version: 1.0.0
+priority: high
+
+workflows:
+  - id: add-api-route
+    name: "Add New API Route"
+    description: "Complete workflow for adding a new API endpoint"
+    
+    steps:
+      - step: 1
+        action: "Define contract in shared/routes.ts"
+        template: |
+          // shared/routes.ts
+          import { z } from 'zod';
+          
+          export const {entityName}Schema = z.object({
+            id: z.string().uuid(),
+            // Add your fields here
+            createdAt: z.string().datetime()
+          });
+          
+          export const {entityName}Routes = {
+            list: {
+              method: 'GET' as const,
+              path: '/api/{entityNamePlural}',
+              responses: {
+                200: z.array({entityName}Schema)
+              }
+            },
+            create: {
+              method: 'POST' as const,
+              path: '/api/{entityNamePlural}',
+              body: {entityName}Schema.omit({ id: true, createdAt: true }),
+              responses: {
+                201: {entityName}Schema
+              }
+            }
+          };
+        
+        validation:
+          - "Schema uses Zod for validation"
+          - "Routes follow REST conventions"
+          - "Response types are defined"
+      
+      - step: 2
+        action: "Create database table in shared/schema.ts"
+        template: |
+          // shared/schema.ts
+          import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+          
+          export const {entityNamePlural}Table = sqliteTable('{entityNamePlural}', {
+            id: text('id').primaryKey(),
+            // Add your columns here
+            createdAt: text('created_at').notNull()
+          });
+        
+        validation:
+          - "Table name matches route path"
+          - "Primary key defined"
+          - "Column types match schema"
+      
+      - step: 3
+        action: "Create route handler in apps/api/src/routes/"
+        template: |
+          // apps/api/src/routes/{entityNamePlural}.ts
+          import { Hono } from 'hono';
+          import { {entityName}Schema } from '../../../shared/routes';
+          import { {entityNamePlural}Table } from '../../../shared/schema';
+          
+          const {entityNamePlural} = new Hono();
+          
+          {entityNamePlural}.get('/', async (c) => {
+            const db = c.get('db'); // Injected dependency
+            const results = await db.select().from({entityNamePlural}Table).all();
+            return c.json(results);
+          });
+          
+          {entityNamePlural}.post('/', async (c) => {
+            try {
+              const db = c.get('db');
+              const body = await c.req.json();
+              const validated = {entityName}Schema.omit({ id: true, createdAt: true }).parse(body);
+              
+              const newItem = {
+                id: crypto.randomUUID(), // Edge-compatible
+                ...validated,
+                createdAt: new Date().toISOString()
+              };
+              
+              await db.insert({entityNamePlural}Table).values(newItem);
+              return c.json(newItem, 201);
+            } catch (error) {
+              if (error instanceof z.ZodError) {
+                return c.json({ error: 'Validation failed', details: error.errors }, 400);
+              }
+              return c.json({ error: 'Internal server error' }, 500);
+            }
+          });
+          
+          export default {entityNamePlural};
+        
+        validation:
+          - "Database accessed via c.get('db')"
+          - "Zod validation on all inputs"
+          - "Proper error handling"
+          - "Edge-compatible APIs only"
+      
+      - step: 4
+        action: "Register route in apps/api/src/index.ts"
+        template: |
+          // apps/api/src/index.ts
+          import {entityNamePlural} from './routes/{entityNamePlural}';
+          
+          app.route('/api/{entityNamePlural}', {entityNamePlural});
+        
+        validation:
+          - "Route path matches schema definition"
+      
+      - step: 5
+        action: "Generate and run database migration"
+        commands:
+          - "npm run db:generate"
+          - "npm run db:migrate"
+        
+        validation:
+          - "Migration file created"
+          - "Migration applied successfully"
+      
+      - step: 6
+        action: "Test the endpoint"
+        commands:
+          - "npm run dev"
+          - "curl -X POST http://localhost:5173/api/{entityNamePlural} -H 'Content-Type: application/json' -d '{\"field\":\"value\"}'"
+        
+        validation:
+          - "Endpoint responds with 201"
+          - "Data persisted to database"
+          - "Validation errors return 400"
+
+  - id: add-frontend-page
+    name: "Add New Frontend Page"
+    description: "Workflow for adding a new React page with API integration"
+    
+    steps:
+      - step: 1
+        action: "Create page component in client/src/pages/"
+        template: |
+          // client/src/pages/{PageName}.tsx
+          import { useEffect, useState } from 'react';
+          import { {entityName}Schema } from '../../../shared/routes';
+          import type { z } from 'zod';
+          
+          type {EntityName} = z.infer<typeof {entityName}Schema>;
+          
+          export default function {PageName}() {
+            const [items, setItems] = useState<{EntityName}[]>([]);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState<string | null>(null);
+            
+            useEffect(() => {
+              fetch('/api/{entityNamePlural}')
+                .then(res => {
+                  if (!res.ok) throw new Error('Failed to fetch');
+                  return res.json();
+                })
+                .then(data => {
+                  setItems(data);
+                  setLoading(false);
+                })
+                .catch(err => {
+                  setError(err.message);
+                  setLoading(false);
+                });
+            }, []);
+            
+            if (loading) return <div>Loading...</div>;
+            if (error) return <div>Error: {error}</div>;
+            
+            return (
+              <div>
+                <h1>{PageName}</h1>
+                <ul>
+                  {items.map(item => (
+                    <li key={item.id}>{/* Render item */}</li>
+                  ))}
+                </ul>
+              </div>
+            );
+          }
+        
+        validation:
+          - "Uses shared types from Zod schemas"
+          - "Proper error handling"
+          - "Loading states handled"
+      
+      - step: 2
+        action: "Add route in client/src/App.tsx"
+        template: |
+          // client/src/App.tsx
+          import {PageName} from './pages/{PageName}';
+          
+          <Route path="/{pagePath}" element={<{PageName} />} />
+        
+        validation:
+          - "Route path follows conventions"
+
+  - id: fix-edge-incompatibility
+    name: "Fix Edge Incompatibility"
+    description: "Diagnostic and fix workflow for edge compatibility issues"
+    
+    steps:
+      - step: 1
+        action: "Identify the issue"
+        checklist:
+          - "Check for Node.js imports in apps/api/src/"
+          - "Check database access pattern"
+          - "Check environment variable usage"
+          - "Check for file system operations"
+          - "Check crypto API usage"
+        
+        common_issues:
+          - issue: "Module not found: fs"
+            cause: "Node.js import in edge code"
+            solution: "Use Web Standard APIs or move to server/"
+            
+          - issue: "db is undefined"
+            cause: "Missing dependency injection"
+            solution: "Use c.get('db') instead of direct import"
+            
+          - issue: "process is not defined"
+            cause: "Using process.env"
+            solution: "Use c.env.VARIABLE_NAME"
+            
+          - issue: "randomBytes is not a function"
+            cause: "Using Node.js crypto"
+            solution: "Use crypto.randomUUID() or crypto.getRandomValues()"
+      
+      - step: 2
+        action: "Apply edge-compatible solution"
+        examples:
+          - name: "File System → Environment Variables"
+            before: |
+              import fs from 'fs';
+              const config = JSON.parse(fs.readFileSync('./config.json', 'utf-8'));
+            after: |
+              import config from './config.json'; // Static import
+              // OR
+              const configValue = c.env.CONFIG_VALUE; // Environment variable
+          
+          - name: "Node.js Crypto → Web Crypto"
+            before: |
+              import { randomBytes } from 'crypto';
+              const token = randomBytes(32).toString('hex');
+            after: |
+              const token = crypto.randomUUID();
+              // OR for hex string:
+              const array = new Uint8Array(32);
+              crypto.getRandomValues(array);
+              const hex = Array.from(array).map(b => b.toString(16).padStart(2, '0')).join('');
+          
+          - name: "Direct DB Import → Dependency Injection"
+            before: |
+              import { db } from '../../../server/db';
+              const users = db.select().from(usersTable).all();
+            after: |
+              const db = c.get('db');
+              const users = await db.select().from(usersTable).all();
+      
+      - step: 3
+        action: "Verify the fix"
+        commands:
+          - "npm run check"
+          - "npm run dev"
+        
+        validation:
+          - "TypeScript check passes"
+          - "Dev server runs without errors"
+          - "Endpoint responds correctly"
+
+  - id: database-migration
+    name: "Create Database Migration"
+    description: "Workflow for adding or modifying database tables"
+    
+    steps:
+      - step: 1
+        action: "Update schema in shared/schema.ts"
+        template: |
+          // shared/schema.ts
+          import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+          
+          export const {tableName}Table = sqliteTable('{tableName}', {
+            id: text('id').primaryKey(),
+            // Add columns here
+            createdAt: text('created_at').notNull(),
+            updatedAt: text('updated_at')
+          });
+        
+        validation:
+          - "Column types match expected data"
+          - "Primary key defined"
+          - "Foreign keys properly referenced"
+      
+      - step: 2
+        action: "Generate migration"
+        commands:
+          - "npm run db:generate"
+        
+        validation:
+          - "Migration file created in drizzle/"
+      
+      - step: 3
+        action: "Review migration"
+        checklist:
+          - "Migration SQL is correct"
+          - "No data loss for existing tables"
+          - "Indexes created if needed"
+      
+      - step: 4
+        action: "Apply migration"
+        commands:
+          - "npm run db:migrate"
+        
+        validation:
+          - "Migration applied successfully"
+          - "Database schema updated"
+      
+      - step: 5
+        action: "Update TypeScript types"
+        notes: "Drizzle automatically generates types from schema"
+        
+        validation:
+          - "npm run check passes"
+
+# Workflow selection guide
+selection_guide:
+  - trigger: "user wants to add API endpoint"
+    workflow: "add-api-route"
+    
+  - trigger: "user wants to add frontend page"
+    workflow: "add-frontend-page"
+    
+  - trigger: "code works in dev but fails in production"
+    workflow: "fix-edge-incompatibility"
+    
+  - trigger: "user wants to add/modify database table"
+    workflow: "database-migration"
+
+# Best practices
+best_practices:
+  - "Always start with the contract (shared/routes.ts)"
+  - "Validate all inputs with Zod"
+  - "Use dependency injection for database"
+  - "Handle errors gracefully"
+  - "Test endpoints before committing"
+  - "Run TypeScript check before pushing"

@@ -1,0 +1,421 @@
+# Edge Starter Kit - Nao AI Rules
+
+## 🎯 Project Context
+You're working with the **Edge Starter Kit** - a production-ready, multi-runtime full-stack template that runs on:
+- Cloudflare Workers
+- Vercel Edge Functions
+- Deno Deploy
+- Node.js
+
+**Core Philosophy**: Write once, run anywhere. All business logic must be platform-agnostic.
+
+---
+
+## 📚 MANDATORY: Read Documentation First
+
+**Before ANY code changes, consult `.edge-stack/` in this order:**
+
+1. **`.edge-stack/index.md`** - Project overview and quick start
+2. **`.edge-stack/requirements.md`** - Edge constraints (CRITICAL)
+3. **`.edge-stack/architecture.md`** - Project structure and patterns
+4. **`.edge-stack/coding-standards.md`** - Code style and conventions
+5. **`.edge-stack/workflows.md`** - Step-by-step guides for common tasks
+6. **`.edge-stack/deployment.md`** - Runtime adapters and deployment
+7. **`.edge-stack/checklist.md`** - Pre-commit quality checks
+
+**Why?** This documentation contains the architectural decisions, constraints, and patterns that make this project work across multiple runtimes. Ignoring it will break edge compatibility.
+
+---
+
+## 🚫 Critical Constraints (NEVER VIOLATE)
+
+### 1. Edge Compatibility Rules
+
+#### ❌ FORBIDDEN in `apps/api/src/`:
+```typescript
+// Node.js built-in modules
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { randomBytes } from 'crypto';
+import { Buffer } from 'buffer';
+
+// Native modules
+import Database from 'better-sqlite3';
+import bcrypt from 'bcrypt';
+
+// Node.js-specific APIs
+process.env.NODE_ENV;
+__dirname;
+__filename;
+```
+
+#### ✅ ALLOWED in `apps/api/src/`:
+```typescript
+// Web Standard APIs
+crypto.randomUUID();
+crypto.subtle.digest();
+fetch('https://api.example.com');
+new Request('https://example.com');
+new Response('Hello', { status: 200 });
+new URL('https://example.com');
+new Headers({ 'Content-Type': 'application/json' });
+
+// Environment variables (via Hono context)
+c.env.DATABASE_URL;
+
+// Platform-agnostic libraries
+import { z } from 'zod';
+import { Hono } from 'hono';
+```
+
+### 2. Code Organization (Strict Boundaries)
+
+```
+apps/api/src/       → Platform-agnostic business logic (EDGE-COMPATIBLE ONLY)
+apps/api/deploy/    → Platform-specific adapters (Node.js OK here)
+server/             → Development server (Node.js OK here)
+shared/             → Type contracts (platform-agnostic)
+client/             → React frontend (browser APIs only)
+```
+
+**Rule**: If it's in `apps/api/src/`, it MUST run in a Cloudflare Worker.
+
+### 3. Database Access Patterns
+
+#### ❌ WRONG:
+```typescript
+// apps/api/src/routes/users.ts
+import { db } from '../../../server/db'; // NEVER import server/db.ts
+
+app.get('/users', async (c) => {
+  const users = db.select().from(usersTable).all();
+  return c.json(users);
+});
+```
+
+#### ✅ CORRECT:
+```typescript
+// apps/api/src/routes/users.ts
+import { usersTable } from '../../../shared/schema';
+
+app.get('/users', async (c) => {
+  const db = c.get('db'); // Injected via context
+  const users = await db.select().from(usersTable).all();
+  return c.json(users);
+});
+```
+
+**Development**: SQLite via `better-sqlite3` (in `server/db.ts` only)
+**Production**: Edge-compatible databases (Cloudflare D1, Turso, Neon HTTP)
+
+---
+
+## ✅ Standard Workflows
+
+### Adding a New API Route
+
+**Step 1**: Define contract in `shared/routes.ts`
+```typescript
+import { z } from 'zod';
+
+export const itemSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  createdAt: z.string().datetime()
+});
+
+export const itemRoutes = {
+  list: {
+    method: 'GET' as const,
+    path: '/api/items',
+    responses: {
+      200: z.array(itemSchema)
+    }
+  },
+  create: {
+    method: 'POST' as const,
+    path: '/api/items',
+    body: itemSchema.omit({ id: true, createdAt: true }),
+    responses: {
+      201: itemSchema
+    }
+  }
+};
+```
+
+**Step 2**: Create route handler in `apps/api/src/routes/items.ts`
+```typescript
+import { Hono } from 'hono';
+import { itemSchema } from '../../../shared/routes';
+import { itemsTable } from '../../../shared/schema';
+
+const items = new Hono();
+
+items.get('/', async (c) => {
+  const db = c.get('db');
+  const results = await db.select().from(itemsTable).all();
+  return c.json(results);
+});
+
+items.post('/', async (c) => {
+  const db = c.get('db');
+  const body = await c.req.json();
+  const validated = itemSchema.omit({ id: true, createdAt: true }).parse(body);
+  
+  const newItem = {
+    id: crypto.randomUUID(),
+    ...validated,
+    createdAt: new Date().toISOString()
+  };
+  
+  await db.insert(itemsTable).values(newItem);
+  return c.json(newItem, 201);
+});
+
+export default items;
+```
+
+**Step 3**: Register route in `apps/api/src/index.ts`
+```typescript
+import items from './routes/items';
+
+app.route('/api/items', items);
+```
+
+**Step 4**: Add database table in `shared/schema.ts`
+```typescript
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+
+export const itemsTable = sqliteTable('items', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  createdAt: text('created_at').notNull()
+});
+```
+
+**Step 5**: Create migration
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+### Adding a New Frontend Page
+
+**Step 1**: Create page component in `client/src/pages/`
+```typescript
+// client/src/pages/Items.tsx
+import { useEffect, useState } from 'react';
+import { itemSchema } from '../../../shared/routes';
+import type { z } from 'zod';
+
+type Item = z.infer<typeof itemSchema>;
+
+export default function Items() {
+  const [items, setItems] = useState<Item[]>([]);
+  
+  useEffect(() => {
+    fetch('/api/items')
+      .then(res => res.json())
+      .then(data => setItems(data));
+  }, []);
+  
+  return (
+    <div>
+      <h1>Items</h1>
+      <ul>
+        {items.map(item => (
+          <li key={item.id}>{item.name}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+```
+
+**Step 2**: Add route in `client/src/App.tsx`
+```typescript
+import Items from './pages/Items';
+
+<Route path="/items" element={<Items />} />
+```
+
+### Debugging Edge Compatibility Issues
+
+**Problem**: Code works in dev but fails in production
+
+**Checklist**:
+1. ✅ Check imports - any Node.js modules in `apps/api/src/`?
+2. ✅ Check database access - using `c.get('db')` instead of direct import?
+3. ✅ Check environment variables - using `c.env.VAR` instead of `process.env.VAR`?
+4. ✅ Check file system - any `fs.readFile()` or similar?
+5. ✅ Check crypto - using `crypto.randomUUID()` instead of `crypto.randomBytes()`?
+
+**Solution Pattern**:
+```typescript
+// ❌ Before (Node.js-specific)
+import { randomBytes } from 'crypto';
+const token = randomBytes(32).toString('hex');
+
+// ✅ After (Edge-compatible)
+const token = crypto.randomUUID();
+```
+
+---
+
+## 🎨 Code Style & Conventions
+
+### TypeScript
+- **Strict mode enabled** - no `any` types
+- **Zod for validation** - validate all inputs
+- **Type inference** - use `z.infer<typeof schema>` for types
+
+### File Naming
+- **Components**: PascalCase (`Dashboard.tsx`)
+- **Routes**: kebab-case (`user-profile.ts`)
+- **Utilities**: camelCase (`formatDate.ts`)
+
+### Imports
+- **Absolute paths** for shared code: `../../../shared/routes`
+- **Relative paths** within same directory: `./utils`
+- **Group imports**: external → internal → relative
+
+### Error Handling
+```typescript
+// ✅ Always use try-catch with proper error responses
+app.post('/api/items', async (c) => {
+  try {
+    const body = await c.req.json();
+    const validated = itemSchema.parse(body);
+    // ... business logic
+    return c.json(result, 201);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return c.json({ error: 'Validation failed', details: error.errors }, 400);
+    }
+    console.error('Unexpected error:', error);
+    return c.json({ error: 'Internal server error' }, 500);
+  }
+});
+```
+
+---
+
+## 🚨 Red Flags (Stop and Review)
+
+If you see ANY of these patterns, **STOP** and consult `.edge-stack/`:
+
+🚩 Importing `fs`, `path`, `os`, or other Node.js built-ins in `apps/api/src/`
+🚩 Importing `server/db.ts` in `apps/api/src/`
+🚩 Using `process.env` in `apps/api/src/`
+🚩 Using `__dirname` or `__filename` in `apps/api/src/`
+🚩 Installing native modules (bcrypt, better-sqlite3) without edge alternatives
+🚩 Direct database queries without dependency injection
+🚩 Missing Zod validation on API inputs
+🚩 Hardcoded environment values
+
+---
+
+## 🧪 Testing & Verification
+
+### Before Committing
+```bash
+# Type check
+npm run check
+
+# Run tests
+npm test
+
+# Start dev server
+npm run dev
+
+# Test API endpoints
+curl http://localhost:5173/api/health
+curl http://localhost:5173/api/hello
+```
+
+### Pre-Deployment Checklist
+- [ ] All routes defined in `shared/routes.ts`
+- [ ] All inputs validated with Zod
+- [ ] No Node.js APIs in `apps/api/src/`
+- [ ] Database injected via context
+- [ ] Environment variables accessed via `c.env`
+- [ ] TypeScript check passes
+- [ ] Tests pass
+- [ ] Dev server runs without errors
+
+---
+
+## 📦 Tech Stack Reference
+
+### Backend
+- **Hono**: Web framework (edge-compatible)
+- **Drizzle ORM**: Type-safe database queries
+- **Zod**: Runtime validation
+- **better-sqlite3**: Dev database (server only)
+
+### Frontend
+- **React 18**: UI framework
+- **React Router**: Client-side routing
+- **Vite**: Build tool and dev server
+- **TypeScript**: Type safety
+
+### Deployment
+- **Cloudflare Workers**: Edge runtime
+- **Vercel Edge Functions**: Edge runtime
+- **Deno Deploy**: Edge runtime
+- **Node.js**: Traditional runtime
+
+---
+
+## 💡 Pro Tips
+
+1. **Start with the contract**: Define routes in `shared/routes.ts` before writing handlers
+2. **Validate everything**: Use Zod schemas for all inputs
+3. **Think edge-first**: If it doesn't work in Cloudflare Workers, it's not edge-compatible
+4. **Inject dependencies**: Never hardcode database or external services
+5. **Use Web Standards**: When in doubt, check if it's available in a browser
+
+---
+
+## 🔗 Quick Links
+
+- [Hono Documentation](https://hono.dev/)
+- [Drizzle ORM](https://orm.drizzle.team/)
+- [Zod Documentation](https://zod.dev/)
+- [Cloudflare Workers](https://workers.cloudflare.com/)
+- [Web APIs](https://developer.mozilla.org/en-US/docs/Web/API)
+
+---
+
+## 📝 Communication Style
+
+When suggesting changes:
+1. **Explain WHY** - Reference edge constraints or documentation
+2. **Show examples** - Provide before/after code snippets
+3. **Highlight risks** - Point out potential edge compatibility issues
+4. **Offer alternatives** - Suggest edge-compatible solutions
+5. **Link to docs** - Reference specific `.edge-stack/` files
+
+**Example Response**:
+> "I notice you're importing `fs` in `apps/api/src/users.ts`. This will break edge compatibility because file system APIs aren't available in Cloudflare Workers.
+> 
+> Instead, consider:
+> 1. Moving file operations to `server/` if they're dev-only
+> 2. Using an edge-compatible storage service (R2, S3)
+> 3. Storing data in the database instead
+>
+> See `.edge-stack/requirements.md` for more details on edge constraints."
+
+---
+
+## 🎓 Learning Resources
+
+- **New to edge computing?** Read `.edge-stack/requirements.md`
+- **Need to add a feature?** Check `.edge-stack/workflows.md`
+- **Deployment questions?** See `.edge-stack/deployment.md`
+- **Code style questions?** Review `.edge-stack/coding-standards.md`
+
+---
+
+**Remember**: The `.edge-stack/` directory is the source of truth. When in doubt, read the docs!

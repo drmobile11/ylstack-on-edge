@@ -1,0 +1,309 @@
+# Edge Starter Kit - AI Assistant Rules
+
+## Project Identity
+This is the **Edge Starter Kit** - a multi-runtime, edge-ready full-stack starter template designed to run on Cloudflare Workers, Vercel Edge, Deno Deploy, and Node.js.
+
+## 🎯 Primary Directive
+**ALWAYS read and respect the documentation in `.edge-stack/` before making any code changes.**
+
+## 📚 Required Reading (In Order)
+1. **`.edge-stack/index.md`** - Start here for project overview
+2. **`.edge-stack/requirements.md`** - Understand edge constraints
+3. **`.edge-stack/architecture.md`** - Learn project structure
+4. **`.edge-stack/coding-standards.md`** - Follow best practices
+5. **`.edge-stack/workflows.md`** - Use for common tasks
+6. **`.edge-stack/deployment.md`** - Understand runtime adapters
+
+## 🚫 Critical Constraints (NEVER VIOLATE)
+
+### 1. Edge Compatibility
+- ❌ **NO Node.js APIs** in `apps/api/src/` (fs, path, crypto.randomBytes, etc.)
+- ✅ **ONLY Web Standard APIs** (fetch, Request, Response, URL, crypto.randomUUID, etc.)
+- ❌ **NO native modules** (better-sqlite3, bcrypt, etc.) in edge code
+- ✅ **HTTP-based alternatives** for edge runtimes (D1, Turso, Neon)
+
+### 2. Code Organization
+- **`apps/api/src/`**: Platform-agnostic business logic (pure Hono app)
+- **`apps/api/deploy/`**: Platform-specific adapters (entry points only)
+- **`server/`**: Development server (Node.js + Express + Vite)
+- **`shared/`**: Type-safe contracts (Zod schemas, Drizzle tables)
+- **`client/`**: Frontend React application
+
+### 3. Database Rules
+- Development: SQLite via `better-sqlite3` (in `server/db.ts` only)
+- Production: Edge-compatible databases (D1, Turso, Neon)
+- **NEVER** import `server/db.ts` in `apps/api/src/`
+- Use dependency injection for database in production adapters
+
+## ✅ Best Practices
+
+### Adding New API Routes
+```typescript
+// 1. Define contract in shared/routes.ts
+export const myFeature = {
+  get: {
+    method: 'GET' as const,
+    path: '/api/items',
+    responses: {
+      200: z.array(itemSchema)
+    }
+  }
+};
+
+// 2. Implement in apps/api/src/index.ts
+app.get('/items', async (c) => {
+  // Platform-agnostic logic only
+  return c.json(items);
+});
+```
+
+### Adding Database Tables
+```typescript
+// 1. Update shared/schema.ts
+export const itemsTable = sqliteTable('items', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString())
+});
+
+// 2. Generate migration
+// npm run db:generate
+
+// 3. Apply migration
+// npm run db:migrate
+```
+
+### Creating Runtime Adapters
+```typescript
+// apps/api/deploy/my-platform.ts
+import app from '../src/index';
+
+// Platform-specific entry point
+export default {
+  fetch: app.fetch
+};
+```
+
+## 🔍 Before Making Changes
+
+### Pre-Change Checklist
+1. ✅ Read relevant `.edge-stack/` documentation
+2. ✅ Verify edge compatibility (no Node.js APIs in `/src`)
+3. ✅ Check if similar pattern exists in codebase
+4. ✅ Ensure type safety (Zod validation)
+5. ✅ Consider multi-runtime implications
+
+### Post-Change Checklist
+1. ✅ Run `npm run check` (TypeScript)
+2. ✅ Run `npm run dev` (verify server starts)
+3. ✅ Test affected endpoints
+4. ✅ Update documentation if needed
+5. ✅ Add tests if adding features
+
+## 🎨 Code Style
+
+### TypeScript
+- Use strict mode
+- Prefer `const` over `let`
+- Use explicit return types for functions
+- Avoid `any` - use `unknown` if needed
+
+### Validation
+- Use Zod for all input validation
+- Define schemas in `shared/` for reusability
+- Validate at API boundaries
+
+### Error Handling
+```typescript
+// Good: Structured error responses
+return c.json({ message: 'Not found' }, 404);
+
+// Bad: Throwing unhandled errors
+throw new Error('Something broke');
+```
+
+### Database Queries
+```typescript
+// Good: Drizzle ORM (parameterized)
+await db.select().from(users).where(eq(users.id, id));
+
+// Bad: Raw SQL strings (injection risk)
+await db.execute(`SELECT * FROM users WHERE id = '${id}'`);
+```
+
+## 🚀 Common Tasks
+
+### Task: Add a new feature
+1. Read `.edge-stack/workflows.md` → "Creating a New Feature"
+2. Define types in `shared/`
+3. Implement logic in `apps/api/src/`
+4. Update client if needed
+5. Test and verify
+
+### Task: Deploy to new platform
+1. Read `.edge-stack/deployment.md`
+2. Check if adapter exists in `apps/api/deploy/`
+3. Create adapter if needed
+4. Configure platform-specific settings
+5. Deploy
+
+### Task: Fix a bug
+1. Identify affected layer (client/server/shared)
+2. Check `.edge-stack/coding-standards.md` for patterns
+3. Write test to reproduce bug
+4. Fix and verify test passes
+5. Run full checklist
+
+## 🛡️ Security Guidelines
+
+### Input Validation
+- ✅ Validate ALL user inputs with Zod
+- ✅ Sanitize data before database operations
+- ✅ Use parameterized queries (Drizzle ORM)
+
+### Authentication
+- ✅ Never log sensitive data (passwords, tokens)
+- ✅ Use environment variables for secrets
+- ✅ Implement rate limiting for auth endpoints
+
+### Environment Variables
+- ✅ Use `.env` for local development (gitignored)
+- ✅ Provide defaults or clear error messages
+- ✅ Document all required variables in `.env.example`
+
+## 📦 Dependencies
+
+### Adding New Dependencies
+**Before installing, ask:**
+1. Is it edge-compatible? (No native Node.js modules)
+2. Does it use Web Standard APIs?
+3. Is there a lighter alternative?
+4. Is it necessary for core functionality?
+
+### Allowed Patterns
+- ✅ `hono` - Web framework
+- ✅ `zod` - Schema validation
+- ✅ `drizzle-orm` - Database ORM
+- ✅ HTTP-based clients (fetch, axios)
+
+### Forbidden Patterns
+- ❌ `fs`, `path`, `os` - Node.js built-ins (in edge code)
+- ❌ `better-sqlite3`, `pg` - Native database drivers (in edge code)
+- ❌ `bcrypt` - Native crypto (use Web Crypto API)
+
+## 🧪 Testing
+
+### Test Structure
+```typescript
+// apps/api/src/__tests__/feature.test.ts
+import { describe, it, expect } from 'vitest';
+import app from '../index';
+
+describe('Feature', () => {
+  it('should work', async () => {
+    const req = new Request('http://localhost/api/endpoint');
+    const res = await app.fetch(req);
+    expect(res.status).toBe(200);
+  });
+});
+```
+
+### Running Tests
+```bash
+npm test           # Run once
+npm run test:watch # Watch mode
+```
+
+## 🤖 AI Assistant Behavior
+
+### When User Asks to Add Feature
+1. Read `.edge-stack/workflows.md` first
+2. Ask clarifying questions if needed
+3. Propose solution respecting edge constraints
+4. Implement following project patterns
+5. Verify with checklist
+
+### When User Reports Bug
+1. Ask for reproduction steps
+2. Identify affected layer
+3. Check `.edge-stack/coding-standards.md` for correct pattern
+4. Propose fix with explanation
+5. Suggest adding test
+
+### When User Asks About Deployment
+1. Direct to `.edge-stack/deployment.md`
+2. Identify target platform
+3. Verify adapter exists
+4. Guide through platform-specific setup
+5. Provide deployment command
+
+### When Unsure
+1. Read relevant `.edge-stack/` documentation
+2. Search codebase for similar patterns
+3. Ask user for clarification
+4. Propose solution with trade-offs explained
+
+## 📖 Documentation Updates
+
+### When to Update Docs
+- Adding new architectural pattern
+- Creating new adapter
+- Changing core workflow
+- Adding significant feature
+
+### Where to Update
+- **Architecture changes**: `.edge-stack/architecture.md`
+- **New patterns**: `.edge-stack/coding-standards.md`
+- **New workflows**: `.edge-stack/workflows.md`
+- **Deployment changes**: `.edge-stack/deployment.md`
+- **User-facing changes**: `README.md`
+
+## 🎯 Success Criteria
+
+### Every Change Should
+1. ✅ Pass TypeScript check (`npm run check`)
+2. ✅ Work in development (`npm run dev`)
+3. ✅ Be edge-compatible (no Node.js APIs in `/src`)
+4. ✅ Follow project patterns
+5. ✅ Include proper error handling
+6. ✅ Have type safety (Zod + TypeScript)
+
+### Every Feature Should
+1. ✅ Have API contract in `shared/routes.ts`
+2. ✅ Have implementation in `apps/api/src/`
+3. ✅ Have database schema if needed
+4. ✅ Have tests
+5. ✅ Be documented
+
+## 🚨 Red Flags (Stop and Reconsider)
+
+- 🚩 Importing Node.js built-ins in `apps/api/src/`
+- 🚩 Using `any` type without justification
+- 🚩 Raw SQL strings instead of Drizzle ORM
+- 🚩 Missing input validation
+- 🚩 Hardcoded secrets or credentials
+- 🚩 Breaking changes without documentation update
+- 🚩 Adding native dependencies for edge code
+
+## 💡 Remember
+
+> **This is a starter kit, not a finished product.**
+> 
+> The goal is to provide a clean, edge-compatible foundation that developers can build upon. Every change should maintain:
+> - Multi-runtime compatibility
+> - Type safety
+> - Clear separation of concerns
+> - Excellent developer experience
+
+## 🔗 Quick Links
+
+- **Documentation Root**: `.edge-stack/index.md`
+- **Contributing Guide**: `CONTRIBUTING.md`
+- **Setup Guide**: `SETUP_COMPLETE.md`
+- **Main README**: `README.md`
+
+---
+
+**Last Updated**: December 28, 2025  
+**Version**: 1.0.0  
+**Maintained By**: Edge Starter Kit Community
